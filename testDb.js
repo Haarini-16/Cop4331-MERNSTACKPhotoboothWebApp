@@ -17,7 +17,7 @@ async function runTest(){
 			role: 'User'
 		});
 		console.log('Test User Created', testUser.username);
-
+		
 		//create photobooth exmaple
 		
 		const testPhotobooth = await Photobooth.create({
