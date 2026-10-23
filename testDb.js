@@ -10,10 +10,6 @@ async function runTest(){
 		await mongoose.connect(MONGO_URI);
 		console.log('Connected successfully!');
 
-		//clear data to keep test clean
-		await User.deleteMany({});
-		await Photobooth.deleteMany({});
-
 		//test user
 		const testUser = await User.create({
 			username: 'testuser1',
