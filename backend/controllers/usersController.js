@@ -4,27 +4,23 @@ const { createToken } = require('../middleware/auth');
 // POST /api/users
 exports.createUser = async (req, res, next) => {
   try {
-    const { firstName = '', lastName = '', login, password, email = '' } = req.body || {};
+    const { username, password } = req.body || {};
 
-    if (!login || !password) {
-      return res.status(400).json({ error: 'login and password are required' });
+    if (!username || !password) {
+      return res.status(400).json({ error: 'username and password are required' });
     }
 
-    if (await User.exists({ login: String(login) })) {
-      return res.status(409).json({ error: 'A user with that login already exists' });
+    if (await User.exists({ username: String(username) })) {
+      return res.status(409).json({ error: 'A user with that username already exists' });
     }
 
     // role is intentionally not read from the request body: letting clients
-    // choose their own role would let anyone register as an admin.
-    // The password is hashed by the User model before it is saved.
+    //The schema defaults to 'user', and hte model hashes the password and uhhh
     const user = await User.create({
-      firstName: String(firstName),
-      lastName: String(lastName),
-      login: String(login),
-      password: String(password),
-      email: String(email),
-      role: 'user'
+      username: String(username),
+      password: String(password)
     });
+
 
     // A new user is logged in right away, so the response includes a token.
     res
