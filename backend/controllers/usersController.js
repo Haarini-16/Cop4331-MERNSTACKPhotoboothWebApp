@@ -14,7 +14,7 @@ exports.createUser = async (req, res, next) => {
       return res.status(409).json({ error: 'A user with that username already exists' });
     }
 
-    // role is intentionally not read from the request body: letting clients
+    // role isn't read from the body, so nobody can register as Admin.
     //The schema defaults to 'user', and hte model hashes the password and uhhh
     const user = await User.create({
       username: String(username),
