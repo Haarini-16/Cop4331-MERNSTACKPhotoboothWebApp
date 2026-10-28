@@ -15,7 +15,7 @@ exports.createUser = async (req, res, next) => {
     }
 
     // role isn't read from the body, so nobody can register as Admin.
-    //The schema defaults to 'user', and hte model hashes the password and uhhh
+    //The schema defaults to 'user', and the model hashes the password and yeah
     const user = await User.create({
       username: String(username),
       password: String(password)
