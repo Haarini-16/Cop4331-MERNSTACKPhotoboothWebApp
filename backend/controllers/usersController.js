@@ -26,7 +26,7 @@ exports.createUser = async (req, res, next) => {
     res
       .status(201)
       .location(`/api/users/${user._id}`)
-      .json({ token: createToken(user), user });
+      .json({ message: 'User registered', token: createToken(user), user });
   } catch (err) {
     next(err);
   }
