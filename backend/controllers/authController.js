@@ -24,8 +24,29 @@ exports.login = async (req, res, next) => {
     if (user.disabled) {
       return res.status(403).json({ error: 'This account is disabled' });
     }
+    
+    if (!user.verified) {
+      return res.status(403).json({ error: 'Please verify your email' });
+    }
 
     res.status(200).json({ token: createToken(user), user });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.verify = async (req, res, next) => {
+  try {
+    const user = await User.findOneAndUpdate(
+      { verifyToken: String(req.query.token) },
+      { verified: true, $unset: { verifyToken: 1 } }
+    );
+
+    if (!user) {
+      return res.status(400).json({ error: 'Invalid or already used verification link' });
+    }
+
+    res.status(200).json({ message: 'Email verified, you can log in now' });
   } catch (err) {
     next(err);
   }

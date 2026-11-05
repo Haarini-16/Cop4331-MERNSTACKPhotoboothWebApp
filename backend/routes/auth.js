@@ -7,5 +7,5 @@ const router = express.Router();
 // Logging in is an action rather than a resource, so this is the one
 // deliberate, conventional exception to noun-only REST URLs.
 router.post('/login', auth.login);
-
+router.get('/verify', auth.verify);
 module.exports = router;

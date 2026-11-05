@@ -15,6 +15,16 @@ const UserSchema = new mongoose.Schema({
 		minlength: [5, 'Password must be at least 5 characters'],
 		select: false
 	},
+	email: {
+		type: String,
+		required: true,
+		unique: true
+	},
+	verified: {
+		type: Boolean,
+		default: false
+	},
+	verifyToken: String,
 	role: {
 		type: String,
 		enum: ['User', 'Admin'],
@@ -24,6 +34,7 @@ const UserSchema = new mongoose.Schema({
 		type: Boolean,
 		default: false
 	}
+	
 }, {timestamps: true});
 //Hash the password 
 UserSchema.pre('save', async function() {
@@ -38,6 +49,7 @@ UserSchema.methods.checkPassword = function (candidate) {
 UserSchema.set('toJSON', {
 	transform: (doc, ret) => {
 		delete ret.password;
+		delete ret.verifyToken;
 		return ret;
 	}
 });
