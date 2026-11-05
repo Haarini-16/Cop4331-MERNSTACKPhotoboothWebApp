@@ -25,6 +25,7 @@ const UserSchema = new mongoose.Schema({
 		default: false
 	},
 	verifyToken: String,
+	resetToken: String,
 	role: {
 		type: String,
 		enum: ['User', 'Admin'],
@@ -50,6 +51,7 @@ UserSchema.set('toJSON', {
 	transform: (doc, ret) => {
 		delete ret.password;
 		delete ret.verifyToken;
+		delete ret.resetToken;
 		return ret;
 	}
 });
