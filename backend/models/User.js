@@ -20,6 +20,16 @@ const UserSchema = new mongoose.Schema({
 		required: true,
 		unique: true
 	},
+	firstName: {
+		type: String,
+		required: false,
+		default: ''
+	},
+	lastName: {
+		type: String,
+		required: false,
+		default: ''
+	},
 	verified: {
 		type: Boolean,
 		default: false

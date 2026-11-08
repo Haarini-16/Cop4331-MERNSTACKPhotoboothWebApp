@@ -6,7 +6,7 @@ const sendEmail = require('../utils/sendEmail');
 // POST /api/users
 exports.createUser = async (req, res, next) => {
   try {
-    const { username, password, email } = req.body || {};
+    const { username, password, email, firstName, lastName } = req.body || {};
 
     if (!username || !password || !email) {
       return res.status(400).json({ error: 'username, password and email are required' });
@@ -19,6 +19,8 @@ exports.createUser = async (req, res, next) => {
     // role isn't read from the body, so nobody can register as Admin.
     //The schema defaults to 'user', and the model hashes the password and yeah
     const user = await User.create({
+      firstName: String(firstName || ''),
+      lastName: String(lastName || ''),
       username: String(username),
       password: String(password),
       email: String(email),
