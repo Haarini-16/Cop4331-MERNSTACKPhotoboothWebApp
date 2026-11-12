@@ -54,3 +54,24 @@ exports.getUser = async (req, res, next) => {
     next(err);
   }
 };
+
+// PUT /api/users/password
+exports.changePassword = async (req, res, next) => {
+  try {
+    const { newPassword } = req.body || {};
+
+    if (!newPassword) {
+      return res.status(400).json({ error: 'newPassword is required' });
+    }
+
+    const user = await User.findById(req.userId);
+
+    //model hashes it when we save
+    user.password = String(newPassword);
+    await user.save();
+
+    res.status(200).json({ message: 'Password changed' });
+  } catch (err) {
+    next(err);
+  }
+};

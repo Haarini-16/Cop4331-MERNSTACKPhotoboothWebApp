@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const { JWT_SECRET, JWT_EXPIRES_IN } = require('../config/auth');
+const { User } = require('../models');
 
 // Creates the token sent back after a successful login or registration.
 // The token's "sub" (subject) claim holds the user's id.
@@ -34,4 +35,18 @@ exports.requireSelf = (req, res, next) => {
     return res.status(403).json({ error: 'You can only access your own account' });
   }
   next();
+};
+
+//for the admin routes, checks the logged in user is an Admin (after requireAuth)
+exports.requireAdmin = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.userId);
+
+    if (!user || user.role !== 'Admin') {
+      return res.status(403).json({ error: 'Admins only' });
+    }
+    next();
+  } catch (err) {
+    next(err);
+  }
 };
