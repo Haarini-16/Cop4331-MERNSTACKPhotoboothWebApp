@@ -1,5 +1,8 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
+import Login from './components/login';
+import UserDashboard from './components/UserDashboard';
+import AdminDashboard from './components/AdminDashboard';
 
 //restricts view access based on role
 //whether the role of the person logged it is a user or admin

@@ -15,6 +15,10 @@ export default function UserDashboard() {
     const [newPassword, setNewPassword] = useState('');
     // Tracks on-screen text alerts for success or failure 
     const [passMessage, setPassMessage] = useState('');
+    //Track camera
+    const [isCameraActive, setIsCameraActive] = useState(false);
+    // Tracks uploading state
+    const [isUploading, setIsUploading] = useState(false);
 
     // References for HTML video tag streaming live camera frames
     const videoRef = useRef(null);
@@ -42,10 +46,20 @@ export default function UserDashboard() {
             if (videoRef.current) {
                 videoRef.current.srcObject = stream;
             }
+            setIsCameraActive(true);
         } catch {
             alert("Camera Blocked or Offline");
         }
     };
+
+    const stopCamera = () =>{
+        if (videoRef.current && videoRef.current.srcObject){
+            const stream = videoRef.current.srcObject;
+            stream.getTracks().forEach(track => track.stop());
+            videoRef.current.srcObject = null;
+        }
+        setIsCameraActive(false);
+    }
 
     const captureCameraFrame = () => {
         if (images.length >= 3) {

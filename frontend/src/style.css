@@ -1,0 +1,131 @@
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: url("WebsiteBackground.png");
+    background-repeat: no-repeat;
+    background-size: 100% 100%;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.container {
+    width: 380px;
+    background: white;
+    padding: 30px;
+    border-radius: 10px;
+    box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+}
+
+h1 {
+    text-align: center;
+    margin-top: 0;
+    margin-bottom: 25px;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: bold;
+}
+
+input {
+    width: 100%;
+    padding: 11px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    font-size: 15px;
+}
+
+button {
+    width: 100%;
+    padding: 11px;
+    border: none;
+    border-radius: 5px;
+    font-size: 15px;
+    cursor: pointer;
+}
+
+.text-button {
+    background: none;
+    border: none;
+    padding-top: 11px;
+    font: inherit;
+    color: #0066cc;
+    cursor: pointer;
+    text-decoration: underline;
+}
+
+.text-button:hover {
+    color: #03305c;
+}
+
+.primary {
+    background: #6ce5f5;
+    color: white;
+}
+
+.primary:hover {
+    background: #60daeb;
+}
+
+.success {
+    background: #47b0ed;
+    color: white;
+}
+
+.success:hover {
+    background: #3180ad;
+}
+
+.secondary {
+    background: #6c757d;
+    color: white;
+}
+
+.secondary:hover {
+    background: #4f555b;
+    color: white;
+}
+
+.divider {
+    text-align: center;
+    color: #888;
+    margin: 20px 0;
+}
+
+.message {
+    display: none;
+    padding: 10px;
+    margin-bottom: 15px;
+    border-radius: 5px;
+    text-align: center;
+}
+
+.error {
+    background: #f8d7da;
+    color: #721c24;
+}
+
+.success-message {
+    background: #d4edda;
+    color: #1a5127;
+}
+
+#signupForm {
+    display: none;
+}
+
+#forgotPassword {
+    display: none;
+}
+
