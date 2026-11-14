@@ -19,7 +19,7 @@ export default function PrivateRoute({ childern, requiredRole})
 
     if(requiredRole && role != requiredRole)
     {
-        return <Navigate to={role === 'admin' ? '/admin' : '/dashboard'} replave />;
+        return <Navigate to={role === 'admin' ? '/admin' : '/dashboard'} replace />;
     }
     return childern;
 }
