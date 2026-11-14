@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
-import { api } from './photoBooth';
-import { uploadImageToCloud, deleteImageFromCloud } from './CloudinaryUtil';
+import { api } from '../api/apiClient.js';
+import './UserDashboard.css';
+import { uploadImageToCloud, deleteImageFromCloud } from '../utils/CloudinaryUtil';
 
 export default function UserDashboard() {
     // Stores up to 3 captured images
