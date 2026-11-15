@@ -1,289 +1,450 @@
-import React, { useState, useRef } from 'react';
-import { api } from '../api/apiClient.js';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import './UserDashboard.css';
+import {api} from '../api/apiClient.js';
+import { useNavigate } from 'react-router-dom';
 import { uploadImageToCloud, deleteImageFromCloud } from '../utils/CloudinaryUtil';
 
 export default function UserDashboard() {
-    // Stores up to 3 captured images
-    const [images, setImages] = useState([]);
-    // Holds the layout template frame
-    const [frame, setFrame] = useState(null);
-    // Stores final delivery link
-    const [cloudinaryUrl, setCloudinaryUrl] = useState('');
-    // Saves the deletion key from cloudinary 
-    const [deleteToken, setDeleteToken] = useState('');
-    // Tracks user input inside change password
-    const [newPassword, setNewPassword] = useState('');
-    // Tracks on-screen text alerts for success or failure 
-    const [passMessage, setPassMessage] = useState('');
-    //Track camera
-    const [isCameraActive, setIsCameraActive] = useState(false);
-    // Tracks uploading state
-    const [isUploading, setIsUploading] = useState(false);
+    const API_BASE_URL = 'http://147.182.191.129:5000/api';
 
-    // References for HTML video tag streaming live camera frames
+    const navigate = useNavigate();
+
+    const token = localStorage.getItem("token");
+    const currentUserId = localStorage.getItem("userId");
+
+    //photostrip dimensions
+    const CANVAS_WIDTH = 600;
+    const CANVAS_HEIGHT = 1800;
+    const SLOT_HEIGHT = 500;
+
+    //variables
+    const [photoLayers, setPhotoLayers] = useState([]);
+    const [textLayers, setTextLayers] = useState([]);
+    const [newText, setNewText] = useState('');
+    const [textColor, setTextColor] = useState('#ffffff');
+    const [frameImg, setFrameImg] = useState(null);
+    const [draggingItem, setDraggingItem] = useState(null);
+    const [isCameraActive, setIsCameraActive] = useState(false);
+
+    //projects
+    const [projects, setProjects] = useState([]);
+    const [openMenuId, setOpenMenuId] = useState(null);
+    const [isFinalizing, setIsFinalizing] = useState(false);
+
+    //video and canvas
     const videoRef = useRef(null);
-    // References for HTML canvas to render and stitch the final strip
     const canvasRef = useRef(null);
 
-    const handlePasswordUpdate = async (e) => {
-        e.preventDefault();
-        setPassMessage('');
-        if (newPassword.length < 5 || !/\d/.test(newPassword)) {
-            return setPassMessage("Requires 5 characters and 1 number.");
-        }
+    //get existing photobooth projects
+    useEffect(() => {
+        if (!currentUserId) return;
+        fetch(`${API_BASE_URL}/users/${currentUserId}/photobooths`,{
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }  
+        })
+            .then(res => res.json())
+            .then(data => { if (Array.isArray(data)) setProjects(data); })
+            .catch(err => console.error("Failed to load user photobooths", err));
+    }, [currentUserId]);
+
+    //clean up camera
+    useEffect(() => {
+        return () => {
+            if (videoRef.current && videoRef.current.srcObject) {
+                videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+            }
+        };
+    }, []);
+
+
+    //load image element
+    const loadImageElement = (src) => {
+        return new Promise((resolve, reject) => {
+            const img = new window.Image();
+            img.src = src;
+            img.onload = () => resolve(img);
+            img.onerror = reject;
+        });
+    };
+
+    // Auto-stack photos down
+    const addPhotoLayer = async (dataUrl) => {
+        if (photoLayers.length >= 3) return;
         try {
-            await api.user.changePassword(newPassword);
-            setPassMessage("Password changed successfully.");
-            setNewPassword('');
+            const img = await loadImageElement(dataUrl);
+            const slotIndex = photoLayers.length;
+            const yOffset = 150 + (slotIndex * (SLOT_HEIGHT + 40));
+
+            setPhotoLayers(prev => [
+                ...prev,
+                {
+                    id: Date.now() + Math.random(),
+                    src: dataUrl,
+                    img,
+                    x: 50,
+                    y: yOffset,
+                    width: 500,
+                    height: SLOT_HEIGHT
+                }
+            ]);
         } catch (err) {
-            setPassMessage(err.message);
+            console.error("Error loading image:", err);
         }
     };
 
+    const renderCanvas = useCallback(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // template
+        if (frameImg) {
+            ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
+        } else {
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height); // Default white background if no template
+        }
+
+        // photots
+        photoLayers.forEach(layer => {
+            ctx.drawImage(layer.img, layer.x, layer.y, layer.width, layer.height);
+        });
+
+        // text overlays
+        textLayers.forEach(t => {
+            ctx.font = `bold ${t.fontSize}px sans-serif`;
+            ctx.fillStyle = t.color;
+            ctx.textBaseline = 'top';
+            ctx.fillText(t.text, t.x, t.y);
+        });
+    }, [photoLayers, frameImg, textLayers]);
+
+    useEffect(() => {
+        renderCanvas();
+    }, [renderCanvas]);
+
+    //initalize camera
     const startLiveCamera = async () => {
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 400, height: 400 } });
-            if (videoRef.current) {
-                videoRef.current.srcObject = stream;
-            }
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 500, height: 500 } });
+            if (videoRef.current) videoRef.current.srcObject = stream;
             setIsCameraActive(true);
         } catch {
             alert("Camera Blocked or Offline");
         }
     };
 
-    const stopCamera = () =>{
-        if (videoRef.current && videoRef.current.srcObject){
-            const stream = videoRef.current.srcObject;
-            stream.getTracks().forEach(track => track.stop());
+    //stop camera
+    const stopCamera = () => {
+        if (videoRef.current && videoRef.current.srcObject) {
+            videoRef.current.srcObject.getTracks().forEach(track => track.stop());
             videoRef.current.srcObject = null;
         }
         setIsCameraActive(false);
-    }
+    };
 
+    //capture a frame
     const captureCameraFrame = () => {
-        if (images.length >= 3) {
-            return alert("No more than 3 pictures on a strip.");
-        }
+        if (photoLayers.length >= 3) return alert("No more than 3 pictures on a strip.");
+        if (!videoRef.current) return;
+
         const clipCanvas = document.createElement('canvas');
-        clipCanvas.width = 400;
-        clipCanvas.height = 400;
-        const c = clipCanvas.getContext('2d');
-        c.drawImage(videoRef.current, 0, 0, 400, 400);
-        setImages([...images, clipCanvas.toDataURL('image/png')]);
+        clipCanvas.width = 500;
+        clipCanvas.height = SLOT_HEIGHT;
+        clipCanvas.getContext('2d').drawImage(videoRef.current, 0, 0, 500, SLOT_HEIGHT);
+        addPhotoLayer(clipCanvas.toDataURL('image/png'));
     };
 
+    //uploading the three images
     const processFileImport = (e) => {
-        if (images.length >= 3) {
-            return alert("No more than 3 pictures on a strip.");
+        const files = Array.from(e.target.files);
+        if (files.length === 0) return;
+
+        if (photoLayers.length + files.length > 3) {
+            e.target.value = null;
+            return alert("You can only have a maximum of 3 pictures on a strip.");
         }
-        const file = e.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = () => setImages([...images, reader.result]);
-        reader.readAsDataURL(file);
+
+        files.forEach(file => {
+            const reader = new FileReader();
+            reader.onload = () => addPhotoLayer(reader.result);
+            reader.readAsDataURL(file);
+        });
+        e.target.value = null;
     };
 
+    //ploading a custom layout for template
     const processFrameImport = (e) => {
         const file = e.target.files[0];
         if (!file) return;
         const reader = new FileReader();
-        reader.onload = () => setFrame(reader.result);
+        reader.onload = async () => {
+            const img = await loadImageElement(reader.result);
+            setFrameImg(img);
+        };
         reader.readAsDataURL(file);
     };
 
-    const drawStripLayout = () => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const c = canvas.getContext('2d');
-        c.clearRect(0, 0, 1200, 400);
-
-        let filesLoaded = 0;
-        const drawOverlay = () => {
-            filesLoaded++;
-            if (filesLoaded === images.length && frame) {
-                const overlay = new window.Image();
-                overlay.src = frame;
-                overlay.onload = () => c.drawImage(overlay, 0, 0, 1200, 400);
-            }
-        };
-
-        images.forEach((src, index) => {
-            const picture = new window.Image();
-            picture.src = src;
-            picture.onload = () => {
-                c.drawImage(picture, index * 400, 0, 400, 400);
-                drawOverlay();
-            };
-        });
+    /// Add a text layer onto the canvas workspace
+    const handleAddText = () => {
+        if (!newText.trim()) return;
+        setTextLayers(prev => [
+            ...prev,
+            { id: Date.now(), text: newText, x: 50, y: 50, color: textColor, fontSize: 40 }
+        ]);
+        setNewText('');
     };
 
-    const dispatchToCloudEngine = () => {
+    //Calculate coordinates to internal dimensions
+    const getCanvasCoords = (e) => {
+        const canvas = canvasRef.current;
+        const rect = canvas.getBoundingClientRect();
+        return {
+            x: (e.clientX - rect.left) * (canvas.width / rect.width),
+            y: (e.clientY - rect.top) * (canvas.height / rect.height)
+        };
+    };
+
+
+    //clicking and dragging items on the canvas
+    const handleCanvasMouseDown = (e) => {
+        const { x, y } = getCanvasCoords(e);
+        const ctx = canvasRef.current.getContext('2d');
+
+        for (let i = textLayers.length - 1; i >= 0; i--) {
+            const t = textLayers[i];
+            ctx.font = `bold ${t.fontSize}px sans-serif`;
+            if (x >= t.x && x <= t.x + ctx.measureText(t.text).width && y >= t.y && y <= t.y + t.fontSize) {
+                setDraggingItem({ type: 'text', index: i, offsetX: x - t.x, offsetY: y - t.y });
+                return;
+            }
+        }
+
+        for (let i = photoLayers.length - 1; i >= 0; i--) {
+            const p = photoLayers[i];
+            if (x >= p.x && x <= p.x + p.width && y >= p.y && y <= p.y + p.height) {
+                setDraggingItem({ type: 'photo', index: i, offsetX: x - p.x, offsetY: y - p.y });
+                return;
+            }
+        }
+    };
+
+    //Update coordinates of the actively dragged item
+    const handleCanvasMouseMove = (e) => {
+        if (!draggingItem) return;
+        const { x, y } = getCanvasCoords(e);
+
+        if (draggingItem.type === 'photo') {
+            setPhotoLayers(prev => prev.map((item, idx) =>
+                idx === draggingItem.index ? { ...item, x: x - draggingItem.offsetX, y: y - draggingItem.offsetY } : item
+            ));
+        } else if (draggingItem.type === 'text') {
+            setTextLayers(prev => prev.map((item, idx) =>
+                idx === draggingItem.index ? { ...item, x: x - draggingItem.offsetX, y: y - draggingItem.offsetY } : item
+            ));
+        }
+    };
+
+    //Clear dragging state on mouse release
+    const handleCanvasMouseUp = () => setDraggingItem(null);
+
+    //Finalize strip: compile canvas to blob, upload to cloud, and save to backend database
+    const handleFinalizeStrip = () => {
+        if (photoLayers.length < 3) return alert("Please include 3 pictures before finalizing.");
+
+        setIsFinalizing(true);
         canvasRef.current.toBlob(async (blob) => {
             try {
-                const result = await uploadImageToCloud(blob);
-                setCloudinaryUrl(result.url);
-                setDeleteToken(result.deleteToken);
-                alert("Pushed the canvas successfully to cloud storage");
-            } catch {
-                alert("Cloud pipeline rejected operations.");
+                const cloudResult = await uploadImageToCloud(blob);
+                const res = await fetch(`${API_BASE_URL}/users/${currentUserId}/photobooths`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({
+                        imageUrl: cloudResult,
+                        layoutDimensions: `${CANVAS_WIDTH}x${CANVAS_HEIGHT}`
+                    })
+                });
+
+                if (!res.ok)
+                    {
+                        const errorData = await res.json();
+                        console.error("Backend validation error:", errorData);
+                        throw new Error(errorData.message || 'Failed to save to database');
+                    }
+                const savedPhotobooth = await res.json();
+                savedPhotobooth.deleteToken = cloudResult.deleteToken;
+
+                setProjects(prev => [savedPhotobooth, ...prev]);
+                alert("Strip finalized and saved successfully!");
+            } catch (err) {
+                console.error(err);
+                alert("Failed to finalize strip.");
+            } finally {
+                setIsFinalizing(false);
             }
         }, 'image/png');
     };
 
-    const dropCloudAsset = async () => {
+    //delete a project
+    const handleDeleteProject = async (project) => {
         try {
-            await deleteImageFromCloud(deleteToken);
-            setCloudinaryUrl('');
-            setDeleteToken('');
-            alert("Deleted from cloud storage.");
+            if (project.deleteToken) await deleteImageFromCloud(project.deleteToken);
+            await fetch(`${API_BASE_URL}/photobooths/${project._id || project.id}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            setProjects(prev => prev.filter(p => (p._id || p.id) !== (project._id || project.id)));
+            setOpenMenuId(null);
         } catch {
-            alert("Failed deletion.");
+            alert("Failed to delete project.");
         }
     };
 
+    //email a project
+    const handleEmailProject = async (projectId) => {
+        try {
+            const res = await fetch(`${API_BASE_URL}/photobooths/${projectId}/email`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }});
+            if (!res.ok) throw new Error();
+            alert("Strip successfully sent to your email!");
+            setOpenMenuId(null);
+        } catch {
+            alert("Failed to send email.");
+        }
+    };
+
+    //downlaod a project
+    const handleDownloadProject = async (url) => {
+        const response = await fetch(url);
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = 'photobooth_strip.png';
+        link.click();
+        window.URL.revokeObjectURL(blobUrl);
+        setOpenMenuId(null);
+    };
+
+    const handleLogout = () => {
+        localStorage.removeItem("token");
+        localStorage.removeItem("userId");
+        localStorage.removeItem("role");
+
+        navigate("/login");
+    }
+
     return (
-        <div style={{ padding: '30px', maxWidth: '1200px', margin: '0 auto', fontFamily: 'sans-serif' }}>
-            <h2 style={{ borderBottom: '2px solid #eee', paddingBottom: '10px' }}>
-                Creative Workspace
-            </h2>
+        <div className="dashboard-container">
+            <div className = "dashboard-header-container">
+                <h2 className="dashboard-header">Photobooth Workspace</h2>
 
-            {/* Password Self Service */}
-            <div style={{ background: '#eadcdf', padding: '15px', borderRadius: '6px', marginBottom: '30px' }}>
-                <h4>Update Password</h4>
-
-                <form onSubmit={handlePasswordUpdate}>
-                    <input 
-                        type="password"
-                        placeholder="New secure entry key"
-                        value={newPassword}
-                        onChange={e => setNewPassword(e.target.value)}
-                        style={{ padding: '8px', width: '250px', marginRight: '10px' }}
-                    />
-                    <button type="submit" style={{ padding: '8px 15px', cursor: 'pointer' }}>
-                        Commit change
-                    </button>
-                </form>
-                {passMessage && (
-                    <p style={{ fontWeight: 'bold', fontSize: '14px', marginTop: '10px' }}>
-                        {passMessage}
-                    </p>
-                )}
+                <button onClick={handleLogout} className="logout-btn">
+                    Logout
+                </button>
             </div>
-
-            {/* Primary Workplace Split Layout */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '40px' }}>
+            <div className="workspace-grid">
                 <div>
-                    <h3>Capture Stack Inputs</h3>
-                    <button onClick={startLiveCamera} style={{ padding: '10px', marginBottom: '10px', cursor: 'pointer' }}>
-                        Turn on Camera
-                    </button>
+                    <h3 className="section-title">Camera Inputs</h3>
+                    <div style={{ display: 'flex', gap: '15px', marginBottom: '15px' }}>
+                        <button onClick={startLiveCamera} className="btn btn-primary" style={{ marginTop: 0 }}>Turn on Camera</button>
+                        {isCameraActive && <button onClick={stopCamera} className="btn btn-danger" style={{ marginTop: 0 }}>Turn off Camera</button>}
+                    </div>
 
-                    <video
-                        ref={videoRef}
-                        autoPlay
-                        playsInline
-                        style={{ width: '100%', height: '240px', background: '#000', display: 'block', borderRadius: '4px' }}
-                    />
-                    <button
-                        onClick={captureCameraFrame}
-                        style={{ marginTop: '10px', padding: '10px 20px', background: '#670f18', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
-                    >
-                        Capture Snap
-                    </button>
+                    <video ref={videoRef} autoPlay playsInline className="video-preview" />
+                    <button onClick={captureCameraFrame} className="btn btn-primary">Capture Snap ({photoLayers.length}/3)</button>
 
-                    <h5 style={{ marginTop: '25px', marginBottom: '8px' }}>
-                        Import Image
-                    </h5>
-                    <input
-                        type="file"
-                        accept="image/*"
-                        onChange={processFileImport}
-                    />
+                    <h3 className="sub-title">Import Images ({photoLayers.length}/3 selected)</h3>
+                    <input type="file" accept="image/*" multiple onChange={processFileImport} className="file-input" />
 
-                    <h3 style={{ marginTop: '35px' }}>
-                        Upload layout frame 
-                    </h3>
-                    <input
-                        type="file"
-                        accept="image/png"
-                        onChange={processFrameImport}
-                    />
+                    <h3 className="sub-title">Upload Layout Template (2x6 Template)</h3>
+                    <input type="file" accept="image/png" onChange={processFrameImport} className="file-input" />
 
-                    <button 
-                        onClick={() => setImages([])}
-                        style={{ display: 'block', marginTop: '40px', background: '#27070a', color: '#fff', border: 'none', padding: '10px 15px', borderRadius: '4px', cursor: 'pointer' }}
-                    >
-                        Reset Canvas
-                    </button>
+                    <button onClick={() => { setPhotoLayers([]); setTextLayers([]); setFrameImg(null); }} className="btn btn-dark">Reset Canvas</button>
                 </div>
 
-                {/* Live Rendering and Cloud Delivery Stuff */}
                 <div>
-                    <h3>Canvas Compiling</h3>
+                    <h3 className="section-title"> Strip Editor (2x6 Inches)</h3>
+                    <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
+                        <input
+                            type="text"
+                            placeholder="Enter text..."
+                            value={newText}
+                            onChange={(e) => setNewText(e.target.value)}
+                            className="file-input"
+                            style={{ marginBottom: 0 }}
+                        />
+                        <input type="color" value={textColor} onChange={(e) => setTextColor(e.target.value)} style={{ width: '45px', height: '38px', cursor: 'pointer' }} />
+                        <button onClick={handleAddText} className="btn btn-secondary" style={{ marginTop: 0 }}>Add Text</button>
+                    </div>
 
-                    <button
-                        onClick={drawStripLayout}
-                        style={{ padding: '10px 20px', background: '#ffc107', border: 'none', fontWeight: 'bold', borderRadius: '4px', cursor: 'pointer', marginBottom: '15px' }}
-                    >
-                        Compile Layout Strip
-                    </button>
-                    <div style={{ border: '2px solid #ccc', background: '#aaa', padding: '10px', borderRadius: '4px' }}>
+                    <div className="canvas-wrapper vertical-strip-wrapper">
                         <canvas
                             ref={canvasRef}
-                            width="1200"
-                            height="400"
-                            style={{ width: '100%', height: 'auto', background: '#fff', display: 'block' }}
+                            width={CANVAS_WIDTH}
+                            height={CANVAS_HEIGHT}
+                            className="strip-canvas vertical-strip"
+                            style={{ cursor: draggingItem ? 'grabbing' : 'grab' }}
+                            onMouseDown={handleCanvasMouseDown}
+                            onMouseMove={handleCanvasMouseMove}
+                            onMouseUp={handleCanvasMouseUp}
+                            onMouseLeave={handleCanvasMouseUp}
                         />
                     </div>
-                    
-                    <h3 style={{ marginTop: '35px' }}>
-                        Cloud Operations
-                    </h3>
 
-                    <button 
-                        onClick={dispatchToCloudEngine}
-                        disabled={images.length < 3}
-                        style={{ padding: '12px 24px', background: '#28a745', color: '#fff', border: 'none', fontWeight: 'bold', borderRadius: '4px', cursor: 'pointer' }}
+                    <button
+                        onClick={handleFinalizeStrip}
+                        disabled={photoLayers.length < 3 || isFinalizing}
+                        className="btn btn-success"
+                        style={{ marginTop: '15px' }}
                     >
-                        Direct Upload
+                        {isFinalizing ? 'Finalizing & Saving...' : 'Finalize Strip'}
                     </button>
-
-                    {cloudinaryUrl && (
-                        <div style={{ marginTop: '25px', padding: '20px', background: '#e2e3e5', border: '1px solid #ced4da', borderRadius: '4px' }}>
-                            <p style={{ wordBreak: 'break-all', marginTop: '0' }}>
-                                <strong>Image Link:</strong>{' '}
-                                <a href={cloudinaryUrl} target="_blank" rel="noreferrer">
-                                    {cloudinaryUrl}
-                                </a>
-                            </p>
-                            <div style={{ display: 'flex', gap: '12px', marginTop: '15px' }}>
-                                <a 
-                                    href={cloudinaryUrl} 
-                                    download="photobooth_strip.png" 
-                                    style={{ background: '#17a2b8', color: '#fff', padding: '10px 15px', textDecoration: 'none', borderRadius: '4px', fontWeight: 'bold', fontSize: '14px' }}
-                                >
-                                    Download Strip 
-                                </a>
-                
-                                <a 
-                                    href={`mailto:?subject=Photobooth Asset Strip Generated&body=Access asset canvas link directly: ${cloudinaryUrl}`} 
-                                    style={{ background: '#6c757d', color: '#fff', padding: '10px 15px', textDecoration: 'none', borderRadius: '4px', fontSize: '14px' }}
-                                >
-                                    Send Email   
-                                </a>
-                                
-                                <button 
-                                    onClick={dropCloudAsset} 
-                                    style={{ background: '#dc3545', color: '#fff', border: 'none', borderRadius: '4px', padding: '10px 15px', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold' }}
-                                >
-                                    Delete From Storage
-                                </button>
-                            </div>
-                        </div>
-                    )}
                 </div>
+            </div>
+
+            <div className="projects-section" style={{ marginTop: '40px' }}>
+                <h3 className="section-title">Photostrips</h3>
+                {projects.length === 0 ? (
+                    <p style={{ color: '#777' }}>No finalized strips yet.</p>
+                ) : (
+                    <div className="projects-grid">
+                        {projects.map((project) => {
+                            const pId = project._id || project.id;
+                            return (
+                                <div key={pId} className="project-card" onMouseLeave={() => setOpenMenuId(null)}>
+                                    <img src={project.imageUrl} alt="Photobooth Strip" className="project-thumb" />
+                                    <div className="project-overlay">
+                                        <button
+                                            className="three-dots-btn"
+                                            onClick={() => setOpenMenuId(openMenuId === pId ? null : pId)}
+                                        >
+                                            •••
+                                        </button>
+                                        {openMenuId === pId && (
+                                            <div className="project-dropdown">
+                                                <button onClick={() => handleDownloadProject(project.imageUrl)}>Save</button>
+                                                <button onClick={() => handleEmailProject(pId)}>Email</button>
+                                                <button className="delete-option" onClick={() => handleDeleteProject(project)}>Delete</button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
             </div>
         </div>
     );

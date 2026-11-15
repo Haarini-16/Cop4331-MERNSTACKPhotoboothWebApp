@@ -1,26 +1,35 @@
 import React, { useState } from 'react';
-import {api} from '../api/apiClient.js';
+import { useNavigate } from 'react-router-dom';
+import { api } from '../api/apiClient.js';
 import './login.css';
 
 export default function Login() {
-    // State to control which view is visible ('login', 'signup', or 'forgot')
+    const API_URL = 'http://147.182.191.129:5000/api';
+    const navigate = useNavigate();
+
     const [currentView, setCurrentView] = useState('login');
 
     // Form inputs state
     const [loginData, setLoginData] = useState({ username: '', password: '' });
-    const [signupData, setSignupData] = useState({ firstName: '', lastName: '', login: '', password: '' });
+    
+    // sign up data
+    const [signupData, setSignupData] = useState({ username: '', email: '', password: '' });
+    
+    // forget data
     const [forgotData, setForgotData] = useState({ fpUsername: '', fpEmail: '' });
+
+    //reset passwors 
+    const [resetData, setResetData] = useState({code: '', password: ''});
 
     // Message alerts state
     const [loginMessage, setLoginMessage] = useState({ text: '', success: false });
     const [signupMessage, setSignupMessage] = useState({ text: '', success: false });
+    const [forgotMessage, setForgotMessage] = useState({ text: '', success: false });
+    const [resetMessage, setResetMessage] = useState({text: '', success: false});
 
-    const API_URL = "../../../backend/middleware/auth.js";
-
-    // Navigation helpers
     const showLogin = () => { setCurrentView('login'); setLoginMessage({ text: '', success: false }); };
     const showSignup = () => { setCurrentView('signup'); setSignupMessage({ text: '', success: false }); };
-    const showForgotPassword = () => { setCurrentView('forgot'); };
+    const showForgotPassword = () => { setCurrentView('forgot'); setForgotMessage({ text: '', success: false }); };
 
     // Handle Login submission
     async function handleLogin(event) {
@@ -28,33 +37,34 @@ export default function Login() {
         setLoginMessage({ text: '', success: false });
 
         try {
-            const response = await fetch(`${API_URL}?action=login`, {
-                method: "POST",
-                credentials: "include",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    login: loginData.username,
-                    password: loginData.password
-                })
+            const data = await api.user.login({
+                username: loginData.username,
+                password: loginData.password
             });
 
-            const data = await response.json();
+            localStorage.setItem("token", data.token);
+            localStorage.setItem("role", data.user?.role || data.role);
+	    localStorage.setItem("userId", data.user?._id || data.user?.id);
 
-            if (!response.ok) {
-                setLoginMessage({ text: data.error || "Login failed.", success: false });
-                return;
-            }
-
-            const user = data.user || data;
-            sessionStorage.setItem("user", JSON.stringify(user));
             setLoginMessage({ text: "Login successful!", success: true });
 
-            // Redirect based on role
-            window.location.href = user.role === "admin" ? "adminDashboard.js" : "userDashboard.js";
+            const userRole = data.user?.role || data.role;
+            navigate(userRole === "admin" ? "/admin" : "/dashboard");
 
         } catch (error) {
             console.error(error);
-            setLoginMessage({ text: "Could not connect to the server.", success: false });
+	    if (error.message.includes("Please verify your email")){
+		    setLoginMessage({
+			    text:"Your account is not verfied. Please check your email first.",
+		    success: false
+		    });
+	    }
+	    else{
+            	setLoginMessage({
+                	text: error.message || "Login failed. Please check your credentials.",
+                	success: false
+	            });
+	    }
         }
     }
 
@@ -62,34 +72,99 @@ export default function Login() {
     async function handleSignup(event) {
         event.preventDefault();
         setSignupMessage({ text: '', success: false });
+	
+	if (signupData.password.length < 5){
+	setSignupMessage({
+		text:"Password must be at least 5 characters long.",
+		success:false
+		});
+		return;
+	}
 
         try {
-            const response = await fetch(`${API_URL}?action=signup`, {
+            await api.user.signup(signupData);
+
+            setSignupMessage({ text: "Account created successfully! You can now log in.", success: true });
+            setSignupData({ username: '', email: '', password: '' });
+
+        } catch (error) {
+            console.error(error);
+            setSignupMessage({
+                text: error.message || "Could not create account.",
+                success: false
+            });
+        }
+    }
+
+    // Forgot password
+    async function handleForgotPassword(event) {
+        event.preventDefault();
+        setForgotMessage({ text: '', success: false });
+
+        try {
+            const response = await fetch(`${API_URL}/auth/forgot-password`, {
                 method: "POST",
-                credentials: "include",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(signupData)
+                body: JSON.stringify({ email: forgotData.fpEmail })
             });
 
             const data = await response.json();
 
             if (!response.ok) {
-                setSignupMessage({ text: data.error || "Could not create account.", success: false });
+                setForgotMessage({ text: data.error || "Password reset request failed.", success: false });
                 return;
             }
 
-            setSignupMessage({ text: "Account created successfully! You can now log in.", success: true });
-            setSignupData({ firstName: '', lastName: '', login: '', password: '' });
+            setForgotMessage({ text: "Password reset code sent to your email.", success: true });
+
+	    setTimeout(() => {
+		    setCurrentView('reset');
+	    }, 1500);
 
         } catch (error) {
             console.error(error);
-            setSignupMessage({ text: "Could not connect to the server.", success: false });
+            setForgotMessage({ text: "Could not connect to the server.", success: false });
         }
     }
+	async function handleResetPassword(event) {
+		event.preventDefault();
+		setResetMessage({text: '', success: false});
+
+		if (resetData.password.length < 5) {
+			setResetMessage({text: "Password must be at least 5 characters.", success: false});
+			return;
+		}
+		
+		try{
+			const response = await fetch(`${API_URL}/auth/reset-password`, {
+				method: "POST",
+				headers: {"Content-Type": "application/json"},
+				body: JSON.stringify({
+					code: resetData.code,
+					password: resetData.password
+				})
+			});
+			const data = await response.json();
+
+			if(!response.ok){
+				setResetMessage({text: data.error || "Failed to reset password.", success: false});
+				return;
+			}
+			setResetMessage({text: "Password has been reset, you can log in now!", success: true});
+
+			setTimeout(() => {
+				setCurrentView('login');
+				setResetData({code: '', password: ''});
+			},2000);
+		}catch(error){
+			console.error(error);
+			setResetMessage({text: "Could not connect to the server.", success: false});
+		}
+		
+	}
 
     return (
         <div className="container">
-
             {/* LOGIN VIEW */}
             {currentView === 'login' && (
                 <div id="loginForm">
@@ -146,35 +221,97 @@ export default function Login() {
             {currentView === 'forgot' && (
                 <div id="forgotPassword">
                     <h1>Forgot Password</h1>
-                    <div className="form-group">
-                        <label htmlFor="fpUsername">Username</label>
-                        <input
-                            type="text"
-                            id="fpUsername"
-                            required
-                            autoComplete="username"
-                            value={forgotData.fpUsername}
-                            onChange={(e) => setForgotData({ ...forgotData, fpUsername: e.target.value })}
-                        />
-                    </div>
+                    {forgotMessage.text && (
+                        <div className={`message ${forgotMessage.success ? 'success' : 'error'}`}>
+                            {forgotMessage.text}
+                        </div>
+                    )}
+                    <form onSubmit={handleForgotPassword}>
+                        <div className="form-group">
+                            <label htmlFor="fpUsername">Username</label>
+                            <input
+                                type="text"
+                                id="fpUsername"
+                                required
+                                autoComplete="username"
+                                value={forgotData.fpUsername}
+                                onChange={(e) => setForgotData({ ...forgotData, fpUsername: e.target.value })}
+                            />
+                        </div>
 
-                    <div className="form-group">
-                        <label htmlFor="fpEmail">Email</label>
-                        <input
-                            type="text"
-                            id="fpEmail"
-                            required
-                            autoComplete="email"
-                            value={forgotData.fpEmail}
-                            onChange={(e) => setForgotData({ ...forgotData, fpEmail: e.target.value })}
-                        />
-                    </div>
+                        <div className="form-group">
+                            <label htmlFor="fpEmail">Email</label>
+                            <input
+                                type="email"
+                                id="fpEmail"
+                                required
+                                autoComplete="email"
+                                value={forgotData.fpEmail}
+                                onChange={(e) => setForgotData({ ...forgotData, fpEmail: e.target.value })}
+                            />
+                        </div>
+
+                        <button type="submit" className="primary">
+                            Reset Password
+                        </button>
+                    </form>
 
                     <button type="button" className="secondary" onClick={showLogin}>
                         Back to Login
                     </button>
                 </div>
             )}
+	    {/* RESET PASSWORD VIEW (Step 2) */}
+            {currentView === 'reset' && (
+                <div id="resetPasswordForm">
+                    <h1>Set New Password</h1>
+                    <p style={{ textAlign: 'center', color: '#ffcccc', fontSize: '14px', marginBottom: '20px' }}>
+                        Enter the code sent to your email and your new password.
+                    </p>
+
+                    {resetMessage.text && (
+                        <div className={`message ${resetMessage.success ? 'success' : 'error'}`}>
+                            {resetMessage.text}
+                        </div>
+                    )}
+
+                    <form onSubmit={handleResetPassword}>
+                        <div className="form-group">
+                            <label htmlFor="resetCode">Reset Code</label>
+                            <input
+                                type="text"
+                                id="resetCode"
+                                required
+                                placeholder="Enter code from email"
+                                value={resetData.code}
+                                onChange={(e) => setResetData({ ...resetData, code: e.target.value })}
+                            />
+                        </div>
+
+                        <div className="form-group">
+                            <label htmlFor="newPassword">New Password</label>
+                            <input
+                                type="password"
+                                id="newPassword"
+                                required
+                                minLength="5"
+                                placeholder="At least 5 characters"
+                                value={resetData.password}
+                                onChange={(e) => setResetData({ ...resetData, password: e.target.value })}
+                            />
+                        </div>
+
+                        <button type="submit" className="primary">
+                            Update Password
+                        </button>
+                    </form>
+
+                    <button type="button" className="secondary" onClick={() => setCurrentView('login')} style={{ marginTop: '10px' }}>
+                        Back to Login
+                    </button>
+                </div>
+            )}
+
 
             {/* SIGNUP VIEW */}
             {currentView === 'signup' && (
@@ -188,57 +325,34 @@ export default function Login() {
 
                     <form onSubmit={handleSignup}>
                         <div className="form-group">
-                            <label htmlFor="firstName">First Name</label>
                             <input
                                 type="text"
-                                id="firstName"
-                                maxLength="50"
+                                placeholder="Username"
+                                value={signupData.username}
+                                onChange={(e) => setSignupData({ ...signupData, username: e.target.value })}
                                 required
-                                value={signupData.firstName}
-                                onChange={(e) => setSignupData({ ...signupData, firstName: e.target.value })}
                             />
                         </div>
-
                         <div className="form-group">
-                            <label htmlFor="lastName">Last Name</label>
                             <input
-                                type="text"
-                                id="lastName"
-                                maxLength="50"
+                                type="email"
+                                placeholder="Email"
+                                value={signupData.email}
+                                onChange={(e) => setSignupData({ ...signupData, email: e.target.value })}
                                 required
-                                value={signupData.lastName}
-                                onChange={(e) => setSignupData({ ...signupData, lastName: e.target.value })}
                             />
                         </div>
-
                         <div className="form-group">
-                            <label htmlFor="newLogin">Username</label>
-                            <input
-                                type="text"
-                                id="newLogin"
-                                maxLength="50"
-                                required
-                                autoComplete="username"
-                                value={signupData.login}
-                                onChange={(e) => setSignupData({ ...signupData, login: e.target.value })}
-                            />
-                        </div>
-
-                        <div className="form-group">
-                            <label htmlFor="newPassword">Password</label>
                             <input
                                 type="password"
-                                id="newPassword"
-                                required
-                                autoComplete="new-password"
+                                placeholder="Password"
                                 value={signupData.password}
                                 onChange={(e) => setSignupData({ ...signupData, password: e.target.value })}
+                                minLength={5}
+		    		required
                             />
                         </div>
-
-                        <button type="submit" className="success">
-                            Create Account
-                        </button>
+                        <button type="submit" className="success">Sign Up</button>
                     </form>
 
                     <div className="divider">or</div>
@@ -248,7 +362,6 @@ export default function Login() {
                     </button>
                 </div>
             )}
-
         </div>
     );
 }

@@ -1,5 +1,5 @@
 //base url for backend 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://147.182.191.129:5000";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://147.182.191.129:5000/api";
 
 //centralized api client
 async function request(endpoint, options ={}) 
@@ -14,8 +14,12 @@ async function request(endpoint, options ={})
     {
         ...options,
         headers: defaultHeaders,
-        credentials: "include",
     };
+
+   // DEBUG: Log what data is actually being sent
+    if (config.body) {
+        console.log(`API Request [${endpoint}] Payload:`, config.body);
+    }
 
     try
     {
@@ -42,7 +46,7 @@ export const api =
     //auth and user endpoints
     user: 
     {
-        login: (credentials) => request("/users?action=login",
+        login: (credentials) => request("/auth/login",
         {
             method: "POST",
             body: JSON.stringify(credentials)
@@ -54,10 +58,15 @@ export const api =
             body: JSON.stringify(userData)
         }),
 
-        changePassword: (newPassword) => request("/users/password",
+    	resetPassword: (resetData) => request("/auth/reset-password", {
+ 	    method: "POST",
+	    body: JSON.stringify(resetData)
+	}),
+	    
+	changePassword: (newPassword) => request("/users/password",
         {
            method: "PUT",
-           body: JSON.stringify({newpassword}) 
+           body: JSON.stringify({newPassword}) 
         }),
     },
 
