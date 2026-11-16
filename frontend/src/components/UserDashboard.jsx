@@ -1,23 +1,25 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import './UserDashboard.css';
-import {api} from '../api/apiClient.js';
 import { useNavigate } from 'react-router-dom';
 import { uploadImageToCloud, deleteImageFromCloud } from '../utils/CloudinaryUtil';
 
 export default function UserDashboard() {
     const API_BASE_URL = 'http://147.182.191.129:5000/api';
-
     const navigate = useNavigate();
 
     const token = localStorage.getItem("token");
     const currentUserId = localStorage.getItem("userId");
 
-    //photostrip dimensions
+    // photostrip dimensions
     const CANVAS_WIDTH = 600;
     const CANVAS_HEIGHT = 1800;
     const SLOT_HEIGHT = 500;
 
-    //variables
+    // Navigation & UI States
+    const [activeTab, setActiveTab] = useState('studio');
+    const [alertMessage, setAlertMessage] = useState({ type: '', text: '' });
+
+    // Photobooth state variables
     const [photoLayers, setPhotoLayers] = useState([]);
     const [textLayers, setTextLayers] = useState([]);
     const [newText, setNewText] = useState('');
@@ -26,29 +28,28 @@ export default function UserDashboard() {
     const [draggingItem, setDraggingItem] = useState(null);
     const [isCameraActive, setIsCameraActive] = useState(false);
 
-    //projects
+    // Projects & Gallery
     const [projects, setProjects] = useState([]);
     const [openMenuId, setOpenMenuId] = useState(null);
     const [isFinalizing, setIsFinalizing] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
 
-    //video and canvas
+    // Refs
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
 
-    //get existing photobooth projects
+    // Fetch existing photobooth projects
     useEffect(() => {
         if (!currentUserId) return;
-        fetch(`${API_BASE_URL}/users/${currentUserId}/photobooths`,{
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }  
+        fetch(`${API_BASE_URL}/users/${currentUserId}/photobooths`, {
+            headers: { 'Authorization': `Bearer ${token}` }
         })
             .then(res => res.json())
             .then(data => { if (Array.isArray(data)) setProjects(data); })
             .catch(err => console.error("Failed to load user photobooths", err));
-    }, [currentUserId]);
+    }, [currentUserId, API_BASE_URL, token]);
 
-    //clean up camera
+    // Clean up camera stream on unmount
     useEffect(() => {
         return () => {
             if (videoRef.current && videoRef.current.srcObject) {
@@ -57,8 +58,7 @@ export default function UserDashboard() {
         };
     }, []);
 
-
-    //load image element
+    // Load image helper
     const loadImageElement = (src) => {
         return new Promise((resolve, reject) => {
             const img = new window.Image();
@@ -70,7 +70,10 @@ export default function UserDashboard() {
 
     // Auto-stack photos down
     const addPhotoLayer = async (dataUrl) => {
-        if (photoLayers.length >= 3) return;
+        if (photoLayers.length >= 3) {
+            showAlert('error', 'Maximum of 3 pictures allowed on a strip.');
+            return;
+        }
         try {
             const img = await loadImageElement(dataUrl);
             const slotIndex = photoLayers.length;
@@ -90,6 +93,7 @@ export default function UserDashboard() {
             ]);
         } catch (err) {
             console.error("Error loading image:", err);
+            showAlert('error', 'Failed to load image.');
         }
     };
 
@@ -100,20 +104,17 @@ export default function UserDashboard() {
 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // template
         if (frameImg) {
             ctx.drawImage(frameImg, 0, 0, canvas.width, canvas.height);
         } else {
             ctx.fillStyle = '#ffffff';
-            ctx.fillRect(0, 0, canvas.width, canvas.height); // Default white background if no template
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
 
-        // photots
         photoLayers.forEach(layer => {
             ctx.drawImage(layer.img, layer.x, layer.y, layer.width, layer.height);
         });
 
-        // text overlays
         textLayers.forEach(t => {
             ctx.font = `bold ${t.fontSize}px sans-serif`;
             ctx.fillStyle = t.color;
@@ -126,18 +127,22 @@ export default function UserDashboard() {
         renderCanvas();
     }, [renderCanvas]);
 
-    //initalize camera
+    const showAlert = (type, text) => {
+        setAlertMessage({ type, text });
+        setTimeout(() => setAlertMessage({ type: '', text: '' }), 4000);
+    };
+
+    // Camera controls
     const startLiveCamera = async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 500, height: 500 } });
             if (videoRef.current) videoRef.current.srcObject = stream;
             setIsCameraActive(true);
         } catch {
-            alert("Camera Blocked or Offline");
+            showAlert('error', 'Camera Blocked or Offline.');
         }
     };
 
-    //stop camera
     const stopCamera = () => {
         if (videoRef.current && videoRef.current.srcObject) {
             videoRef.current.srcObject.getTracks().forEach(track => track.stop());
@@ -146,9 +151,8 @@ export default function UserDashboard() {
         setIsCameraActive(false);
     };
 
-    //capture a frame
     const captureCameraFrame = () => {
-        if (photoLayers.length >= 3) return alert("No more than 3 pictures on a strip.");
+        if (photoLayers.length >= 3) return showAlert('error', "No more than 3 pictures on a strip.");
         if (!videoRef.current) return;
 
         const clipCanvas = document.createElement('canvas');
@@ -158,14 +162,13 @@ export default function UserDashboard() {
         addPhotoLayer(clipCanvas.toDataURL('image/png'));
     };
 
-    //uploading the three images
     const processFileImport = (e) => {
         const files = Array.from(e.target.files);
         if (files.length === 0) return;
 
         if (photoLayers.length + files.length > 3) {
             e.target.value = null;
-            return alert("You can only have a maximum of 3 pictures on a strip.");
+            return showAlert('error', "You can only have a maximum of 3 pictures on a strip.");
         }
 
         files.forEach(file => {
@@ -176,7 +179,6 @@ export default function UserDashboard() {
         e.target.value = null;
     };
 
-    //ploading a custom layout for template
     const processFrameImport = (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -184,11 +186,11 @@ export default function UserDashboard() {
         reader.onload = async () => {
             const img = await loadImageElement(reader.result);
             setFrameImg(img);
+            showAlert('success', 'Layout template loaded successfully!');
         };
         reader.readAsDataURL(file);
     };
 
-    /// Add a text layer onto the canvas workspace
     const handleAddText = () => {
         if (!newText.trim()) return;
         setTextLayers(prev => [
@@ -198,7 +200,6 @@ export default function UserDashboard() {
         setNewText('');
     };
 
-    //Calculate coordinates to internal dimensions
     const getCanvasCoords = (e) => {
         const canvas = canvasRef.current;
         const rect = canvas.getBoundingClientRect();
@@ -208,8 +209,6 @@ export default function UserDashboard() {
         };
     };
 
-
-    //clicking and dragging items on the canvas
     const handleCanvasMouseDown = (e) => {
         const { x, y } = getCanvasCoords(e);
         const ctx = canvasRef.current.getContext('2d');
@@ -232,7 +231,6 @@ export default function UserDashboard() {
         }
     };
 
-    //Update coordinates of the actively dragged item
     const handleCanvasMouseMove = (e) => {
         if (!draggingItem) return;
         const { x, y } = getCanvasCoords(e);
@@ -248,12 +246,10 @@ export default function UserDashboard() {
         }
     };
 
-    //Clear dragging state on mouse release
     const handleCanvasMouseUp = () => setDraggingItem(null);
 
-    //Finalize strip: compile canvas to blob, upload to cloud, and save to backend database
     const handleFinalizeStrip = () => {
-        if (photoLayers.length < 3) return alert("Please include 3 pictures before finalizing.");
+        if (photoLayers.length < 3) return showAlert('error', "Please include 3 pictures before finalizing.");
 
         setIsFinalizing(true);
         canvasRef.current.toBlob(async (blob) => {
@@ -271,60 +267,54 @@ export default function UserDashboard() {
                     })
                 });
 
-                if (!res.ok)
-                    {
-                        const errorData = await res.json();
-                        console.error("Backend validation error:", errorData);
-                        throw new Error(errorData.message || 'Failed to save to database');
-                    }
+                if (!res.ok) {
+                    const errorData = await res.json();
+                    throw new Error(errorData.message || 'Failed to save to database');
+                }
                 const savedPhotobooth = await res.json();
                 savedPhotobooth.deleteToken = cloudResult.deleteToken;
 
                 setProjects(prev => [savedPhotobooth, ...prev]);
-                alert("Strip finalized and saved successfully!");
+                showAlert('success', "Strip finalized and saved successfully!");
+                setActiveTab('projects');
             } catch (err) {
                 console.error(err);
-                alert("Failed to finalize strip.");
+                showAlert('error', "Failed to finalize strip.");
             } finally {
                 setIsFinalizing(false);
             }
         }, 'image/png');
     };
 
-    //delete a project
     const handleDeleteProject = async (project) => {
         try {
             if (project.deleteToken) await deleteImageFromCloud(project.deleteToken);
             await fetch(`${API_BASE_URL}/photobooths/${project._id || project.id}`, {
                 method: 'DELETE',
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }
+                headers: { 'Authorization': `Bearer ${token}` }
             });
             setProjects(prev => prev.filter(p => (p._id || p.id) !== (project._id || project.id)));
             setOpenMenuId(null);
+            showAlert('success', 'Project deleted successfully.');
         } catch {
-            alert("Failed to delete project.");
+            showAlert('error', "Failed to delete project.");
         }
     };
 
-    //email a project
     const handleEmailProject = async (projectId) => {
         try {
             const res = await fetch(`${API_BASE_URL}/photobooths/${projectId}/email`, {
                 method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`
-                }});
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
             if (!res.ok) throw new Error();
-            alert("Strip successfully sent to your email!");
+            showAlert('success', "Strip successfully sent to your email!");
             setOpenMenuId(null);
         } catch {
-            alert("Failed to send email.");
+            showAlert('error', "Failed to send email.");
         }
     };
 
-    //downlaod a project
     const handleDownloadProject = async (url) => {
         const response = await fetch(url);
         const blob = await response.blob();
@@ -341,111 +331,233 @@ export default function UserDashboard() {
         localStorage.removeItem("token");
         localStorage.removeItem("userId");
         localStorage.removeItem("role");
-
         navigate("/login");
-    }
+    };
+
+    const filteredProjects = projects.filter(p => 
+        (p.createdAt || '').toLowerCase().includes(searchTerm.toLowerCase()) || 
+        (p._id || '').toLowerCase().includes(searchTerm.toLowerCase())
+    );
 
     return (
-        <div className="dashboard-container">
-            <div className = "dashboard-header-container">
-                <h2 className="dashboard-header">Photobooth Workspace</h2>
-
-                <button onClick={handleLogout} className="logout-btn">
-                    Logout
-                </button>
-            </div>
-            <div className="workspace-grid">
-                <div>
-                    <h3 className="section-title">Camera Inputs</h3>
-                    <div style={{ display: 'flex', gap: '15px', marginBottom: '15px' }}>
-                        <button onClick={startLiveCamera} className="btn btn-primary" style={{ marginTop: 0 }}>Turn on Camera</button>
-                        {isCameraActive && <button onClick={stopCamera} className="btn btn-danger" style={{ marginTop: 0 }}>Turn off Camera</button>}
-                    </div>
-
-                    <video ref={videoRef} autoPlay playsInline className="video-preview" />
-                    <button onClick={captureCameraFrame} className="btn btn-primary">Capture Snap ({photoLayers.length}/3)</button>
-
-                    <h3 className="sub-title">Import Images ({photoLayers.length}/3 selected)</h3>
-                    <input type="file" accept="image/*" multiple onChange={processFileImport} className="file-input" />
-
-                    <h3 className="sub-title">Upload Layout Template (2x6 Template)</h3>
-                    <input type="file" accept="image/png" onChange={processFrameImport} className="file-input" />
-
-                    <button onClick={() => { setPhotoLayers([]); setTextLayers([]); setFrameImg(null); }} className="btn btn-dark">Reset Canvas</button>
+        <div className="studio-layout">
+            {/* Sidebar Navigation */}
+            <aside className="studio-sidebar">
+                <div className="studio-brand">
+                    <div className="brand-icon">📸</div>
+                    <span>PhotoBoothStudio</span>
                 </div>
 
-                <div>
-                    <h3 className="section-title"> Strip Editor (2x6 Inches)</h3>
-                    <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
-                        <input
-                            type="text"
-                            placeholder="Enter text..."
-                            value={newText}
-                            onChange={(e) => setNewText(e.target.value)}
-                            className="file-input"
-                            style={{ marginBottom: 0 }}
-                        />
-                        <input type="color" value={textColor} onChange={(e) => setTextColor(e.target.value)} style={{ width: '45px', height: '38px', cursor: 'pointer' }} />
-                        <button onClick={handleAddText} className="btn btn-secondary" style={{ marginTop: 0 }}>Add Text</button>
-                    </div>
+                <div className="sidebar-section-label">Workspace</div>
+                
+                <button 
+                    className={`sidebar-link ${activeTab === 'studio' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('studio')}
+                >
+                    <span>🎨</span> Studio Workspace
+                </button>
+                <button 
+                    className={`sidebar-link ${activeTab === 'projects' ? 'active' : ''}`}
+                    onClick={() => setActiveTab('projects')}
+                >
+                    <span>🖼️</span> My Photostrips ({projects.length})
+                </button>
 
-                    <div className="canvas-wrapper vertical-strip-wrapper">
-                        <canvas
-                            ref={canvasRef}
-                            width={CANVAS_WIDTH}
-                            height={CANVAS_HEIGHT}
-                            className="strip-canvas vertical-strip"
-                            style={{ cursor: draggingItem ? 'grabbing' : 'grab' }}
-                            onMouseDown={handleCanvasMouseDown}
-                            onMouseMove={handleCanvasMouseMove}
-                            onMouseUp={handleCanvasMouseUp}
-                            onMouseLeave={handleCanvasMouseUp}
-                        />
+                <div className="sidebar-bottom">
+                    <div className="studio-profile">
+                        <div className="profile-avatar">U</div>
+                        <div>
+                            <strong>My Studio</strong>
+                            <small>Active User</small>
+                        </div>
                     </div>
-
-                    <button
-                        onClick={handleFinalizeStrip}
-                        disabled={photoLayers.length < 3 || isFinalizing}
-                        className="btn btn-success"
-                        style={{ marginTop: '15px' }}
-                    >
-                        {isFinalizing ? 'Finalizing & Saving...' : 'Finalize Strip'}
+                    <button onClick={handleLogout} className="logout-button">
+                        Sign Out
                     </button>
                 </div>
-            </div>
+            </aside>
 
-            <div className="projects-section" style={{ marginTop: '40px' }}>
-                <h3 className="section-title">Photostrips</h3>
-                {projects.length === 0 ? (
-                    <p style={{ color: '#777' }}>No finalized strips yet.</p>
-                ) : (
-                    <div className="projects-grid">
-                        {projects.map((project) => {
-                            const pId = project._id || project.id;
-                            return (
-                                <div key={pId} className="project-card" onMouseLeave={() => setOpenMenuId(null)}>
-                                    <img src={project.imageUrl} alt="Photobooth Strip" className="project-thumb" />
-                                    <div className="project-overlay">
-                                        <button
-                                            className="three-dots-btn"
-                                            onClick={() => setOpenMenuId(openMenuId === pId ? null : pId)}
-                                        >
-                                            •••
-                                        </button>
-                                        {openMenuId === pId && (
-                                            <div className="project-dropdown">
-                                                <button onClick={() => handleDownloadProject(project.imageUrl)}>Save</button>
-                                                <button onClick={() => handleEmailProject(pId)}>Email</button>
-                                                <button className="delete-option" onClick={() => handleDeleteProject(project)}>Delete</button>
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            );
-                        })}
+            {/* Main Content Area */}
+            <main className="studio-main">
+                {/* Topbar Header */}
+                <header className="studio-topbar">
+                    <div>
+                        <div className="breadcrumb">Workspace / {activeTab.toUpperCase()}</div>
+                        <h1>{activeTab === 'studio' ? 'Photobooth Studio' : 'Photostrip Gallery'}</h1>
+                        <p>Design, customize, and manage your custom 2x6 photobooth strips.</p>
+                    </div>
+                </header>
+
+                {/* Alerts Banner */}
+                {alertMessage.text && (
+                    <div className={`studio-alert ${alertMessage.type === 'success' ? 'success-alert' : 'error-alert'}`}>
+                        <span>{alertMessage.type === 'success' ? '✅' : '⚠️'}</span>
+                        <span>{alertMessage.text}</span>
+                        <button onClick={() => setAlertMessage({ type: '', text: '' })}>×</button>
                     </div>
                 )}
-            </div>
+
+                {/* TAB 1: STUDIO WORKSPACE */}
+                {activeTab === 'studio' && (
+                    <>
+                        {/* Stats Overview */}
+                        <div className="studio-stats">
+                            <div className="stat-card">
+                                <div className="stat-icon purple">📷</div>
+                                <div>
+                                    <span>Photos Added</span>
+                                    <h2>{photoLayers.length}/3</h2>
+                                    <small>Current strip slots</small>
+                                </div>
+                            </div>
+                            <div className="stat-card">
+                                <div className="stat-icon green">✍️</div>
+                                <div>
+                                    <span>Text Layers</span>
+                                    <h2>{textLayers.length}</h2>
+                                    <small>Custom captions</small>
+                                </div>
+                            </div>
+                            <div className="stat-card">
+                                <div className="stat-icon red">🖼️</div>
+                                <div>
+                                    <span>Template</span>
+                                    <h2>{frameImg ? 'Loaded' : 'Default'}</h2>
+                                    <small>2x6 Layout frame</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Workspace Grid */}
+                        <div className="workspace-grid">
+                            <div className="studio-panel" style={{ padding: '25px' }}>
+                                <h3 className="section-title">Camera & Inputs</h3>
+                                <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
+                                    <button onClick={startLiveCamera} className="btn btn-primary" style={{ marginTop: 0 }}>Turn on Camera</button>
+                                    {isCameraActive && <button onClick={stopCamera} className="btn btn-danger" style={{ marginTop: 0 }}>Turn off Camera</button>}
+                                </div>
+
+                                <video ref={videoRef} autoPlay playsInline className="video-preview" />
+                                <button onClick={captureCameraFrame} className="btn btn-primary" style={{ width: '100%' }}>
+                                    Capture Snap ({photoLayers.length}/3)
+                                </button>
+
+                                <h3 className="sub-title">Import Images ({photoLayers.length}/3 selected)</h3>
+                                <input type="file" accept="image/*" multiple onChange={processFileImport} className="file-input" />
+
+                                <h3 className="sub-title">Upload Layout Template (2x6)</h3>
+                                <input type="file" accept="image/png" onChange={processFrameImport} className="file-input" />
+
+                                <button onClick={() => { setPhotoLayers([]); setTextLayers([]); setFrameImg(null); }} className="btn btn-dark">
+                                    Reset Canvas Workspace
+                                </button>
+                            </div>
+
+                            <div className="studio-panel" style={{ padding: '25px' }}>
+                                <h3 className="section-title">Strip Editor (2x6 Inches)</h3>
+                                <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
+                                    <input
+                                        type="text"
+                                        placeholder="Enter custom text..."
+                                        value={newText}
+                                        onChange={(e) => setNewText(e.target.value)}
+                                        className="file-input"
+                                        style={{ marginBottom: 0, flex: 1 }}
+                                    />
+                                    <input type="color" value={textColor} onChange={(e) => setTextColor(e.target.value)} style={{ width: '45px', height: '42px', cursor: 'pointer' }} />
+                                    <button onClick={handleAddText} className="btn btn-secondary" style={{ marginTop: 0 }}>Add Text</button>
+                                </div>
+
+                                <div className="canvas-wrapper vertical-strip-wrapper">
+                                    <canvas
+                                        ref={canvasRef}
+                                        width={CANVAS_WIDTH}
+                                        height={CANVAS_HEIGHT}
+                                        className="strip-canvas vertical-strip"
+                                        style={{ cursor: draggingItem ? 'grabbing' : 'grab' }}
+                                        onMouseDown={handleCanvasMouseDown}
+                                        onMouseMove={handleCanvasMouseMove}
+                                        onMouseUp={handleCanvasMouseUp}
+                                        onMouseLeave={handleCanvasMouseUp}
+                                    />
+                                </div>
+
+                                <button
+                                    onClick={handleFinalizeStrip}
+                                    disabled={photoLayers.length < 3 || isFinalizing}
+                                    className="btn btn-success"
+                                    style={{ marginTop: '20px', width: '100%' }}
+                                >
+                                    {isFinalizing ? 'Finalizing & Saving...' : 'Finalize Strip & Save'}
+                                </button>
+                            </div>
+                        </div>
+                    </>
+                )}
+
+                {/* TAB 2: MY PHOTOSTRIPS GALLERY */}
+                {activeTab === 'projects' && (
+                    <div className="studio-panel">
+                        <div className="panel-heading">
+                            <div>
+                                <h2>Finalized Photostrips</h2>
+                                <p>Manage, download, email, or delete your saved booth strips.</p>
+                            </div>
+                            <div className="strip-count">{projects.length} Strips</div>
+                        </div>
+
+                        <div className="studio-toolbar">
+                            <div className="search-wrapper">
+                                <span>🔍</span>
+                                <input
+                                    type="text"
+                                    placeholder="Search strips by ID or date..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                />
+                            </div>
+                        </div>
+
+                        {filteredProjects.length === 0 ? (
+                            <div style={{ padding: '60px', textAlign: 'center', color: '#9c8185' }}>
+                                <p>No finalized strips found.</p>
+                            </div>
+                        ) : (
+                            <div className="projects-grid" style={{ padding: '25px' }}>
+                                {filteredProjects.map((project) => {
+                                    const pId = project._id || project.id;
+                                    return (
+                                        <div key={pId} className="project-card" onMouseLeave={() => setOpenMenuId(null)}>
+                                            <img src={project.imageUrl} alt="Photobooth Strip" className="project-thumb" />
+                                            <div className="project-overlay">
+                                                <button
+                                                    className="three-dots-btn"
+                                                    onClick={() => setOpenMenuId(openMenuId === pId ? null : pId)}
+                                                >
+                                                    •••
+                                                </button>
+                                                {openMenuId === pId && (
+                                                    <div className="project-dropdown">
+                                                        <button onClick={() => handleDownloadProject(project.imageUrl)}>Save Strip</button>
+                                                        <button onClick={() => handleEmailProject(pId)}>Email Strip</button>
+                                                        <button className="delete-option" onClick={() => handleDeleteProject(project)}>Delete</button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Footer */}
+                <footer className="studio-footer">
+                    <span>PhotoBooth</span>
+                    <span>Cloud Photobooth Platform</span>
+                </footer>
+            </main>
         </div>
     );
 }

@@ -52,7 +52,7 @@ export default function Router() {
                 <Route 
                     path="/Admin"
                     element={
-                        <PrivateRoute requiredRole="admin">
+                        <PrivateRoute requiredRole="Admin">
                             <AdminDashboard />
                         </PrivateRoute>
                     }

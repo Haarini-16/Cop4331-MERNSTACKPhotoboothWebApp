@@ -1,5 +1,5 @@
 const API_BASE_URL =
-  import.meta.env.VITE_API_URL || 'http://147.182.191.129:5000';
+  import.meta.env.VITE_API_URL || 'http://147.182.191.129:5000/api';
 
 async function adminRequest(endpoint, options = {}) {
   const token = localStorage.getItem('token');
