@@ -4,7 +4,7 @@ import { api } from '../api/apiClient.js';
 import './login.css';
 
 export default function Login() {
-    const API_URL = 'http://147.182.191.129:5000/api';
+    const API_URL = 'https://cop4331group4.com/api';
     const navigate = useNavigate();
 
     const [currentView, setCurrentView] = useState('login');

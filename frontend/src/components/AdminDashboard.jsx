@@ -144,7 +144,7 @@ export default function AdminDashboard() {
     localStorage.removeItem('role');
     localStorage.removeItem('user');
 
-    window.location.href = '/login';
+    window.location.href = '/';
   };
 
   const formatDate = (date) => {

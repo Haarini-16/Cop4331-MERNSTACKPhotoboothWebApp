@@ -1,5 +1,5 @@
 //base url for backend 
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://147.182.191.129:5000/api";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "https://cop4331group4.com/api";
 
 //centralized api client
 async function request(endpoint, options ={}) 

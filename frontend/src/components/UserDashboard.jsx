@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { uploadImageToCloud, deleteImageFromCloud } from '../utils/CloudinaryUtil';
 
 export default function UserDashboard() {
-    const API_BASE_URL = 'http://147.182.191.129:5000/api';
+    const API_BASE_URL = 'https://cop4331group4.com/api';
     const navigate = useNavigate();
 
     const token = localStorage.getItem("token");
@@ -331,7 +331,7 @@ export default function UserDashboard() {
         localStorage.removeItem("token");
         localStorage.removeItem("userId");
         localStorage.removeItem("role");
-        navigate("/login");
+        navigate("/");
     };
 
     const filteredProjects = projects.filter(p => 
